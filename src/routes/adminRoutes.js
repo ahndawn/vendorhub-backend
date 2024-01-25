@@ -78,9 +78,39 @@ const getVendors = async (req, res) => {
     }
 };
 
+const updateLead = async (req, res) => {
+    try {
+        const { leadId } = req.params;
+        const {
+            timestamp, label, firstname, email, phone1, ozip, dzip, dcity, dstate, movesize, 
+            movedte, conversion, validation, notes, sent_to_gronat, sent_to_sheets, moverref, ocity, ostate
+        } = req.body;
+
+        const updateQuery = `
+            UPDATE lead 
+            SET 
+                timestamp = $1, label = $2, firstname = $3, email = $4, phone1 = $5, 
+                ozip = $6, dzip = $7, dcity = $8, dstate = $9, movesize = $10, 
+                movedte = $11, conversion = $12, validation = $13, notes = $14, 
+                sent_to_gronat = $15, sent_to_sheets = $16, moverref = $17, ocity = $18, ostate = $19
+            WHERE id = $20
+        `;
+        await mainPool.query(updateQuery, [
+            timestamp, label, firstname, email, phone1, ozip, dzip, dcity, dstate, movesize, 
+            movedte, conversion, validation, notes, sent_to_gronat, sent_to_sheets, moverref, ocity, ostate, leadId
+        ]);
+
+        res.json({ message: 'Lead updated successfully' });
+    } catch (error) {
+        console.error("Error updating lead:", error);
+        res.status(500).json({ message: 'Server error occurred while updating lead', error: error.toString() });
+    }
+};
+
 router.get('/vendors', protect, getVendors);
 router.get('/exclusive-leads', protect, getExclusiveLeads);
 router.get('/shared-leads', protect, getSharedLeads);
 router.get('/combined-leads', protect, getCombinedLeads);
+router.put('/update-lead/:leadId', protect, updateLead);
 
 module.exports = router;
