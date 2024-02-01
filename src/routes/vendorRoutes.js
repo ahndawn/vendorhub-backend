@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { mainPool } = require('../../db');
+const { mainPool } = require('../services/db');
 const { protect } = require('../middleware/authMiddleware'); // Import the middleware
 
 const getVendorLeads = async (req, res) => {
@@ -16,16 +16,16 @@ const getVendorLeads = async (req, res) => {
             vendorLabel = req.user.username;
         }
 
-        const query = 'SELECT * FROM lead WHERE label = $1';
-        const { rows } = await mainPool.query(query, [vendorLabel]);
+        const query = 'SELECT * FROM lead WHERE label = $1';           
+        const { rows } = await mainPool.query(query, [vendorLabel]);   
 
         if (rows.length > 0) {
             console.log(`Data fetched for vendor '${vendorLabel}':`, rows);
         } else {
             console.log(`No data found for vendor '${vendorLabel}'`);
         }
-
-        res.json(rows);
+   
+        res.json(rows);   
     } catch (error) {
         console.error("Error fetching vendor leads:", error);
         res.status(500).json({ message: 'Server error occurred while fetching vendor leads', error: error.toString() });
@@ -55,7 +55,7 @@ const updateVendorLead = async (req, res) => {
         // Proceed with the update
         const updateQuery = `
             UPDATE lead 
-            SET 
+            SET    
                 timestamp = $1, label = $2, firstname = $3, email = $4, phone1 = $5, 
                 ozip = $6, dzip = $7, dcity = $8, dstate = $9, movesize = $10, 
                 movedte = $11, conversion = $12, validation = $13, notes = $14, 

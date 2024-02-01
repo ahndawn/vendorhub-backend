@@ -1,21 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const { mainPool, sharedPool } = require('../../db');
+const { mainPool, sharedPool } = require('../services/db');
 const { protect } = require('../middleware/authMiddleware');
-const moment = require('moment'); // Import moment for date formatting
+const LeadStatus = require('../models/LeadStatus');
+const readFromGoogleSheet = require('../services/googleSheetsClient');
+const moment = require('moment');
 
 // Function to get today's date in yyyy-mm-dd format
 const getTodaysDate = () => {
   return moment().format('YYYY-MM-DD');
 };
 
-// Handler to get exclusive leads for admin
 const getExclusiveLeads = async (req, res) => {
     try {
         const todaysDate = getTodaysDate();
         const query = 'SELECT * FROM lead WHERE timestamp = $1';
         const { rows } = await mainPool.query(query, [todaysDate]);
-        res.json(rows);
+
+        // Fetch booked lead IDs from MongoDB
+        const bookedLeads = await LeadStatus.find({ booked: true });
+        const bookedLeadIds = new Set(bookedLeads.map(lead => lead.leadId));
+
+        // Add isBooked status to each lead
+        const leadsWithBookedStatus = rows.map(lead => ({
+            ...lead,
+            isBooked: bookedLeadIds.has(lead.id)
+        }));
+
+        res.json(leadsWithBookedStatus);
     } catch (error) {
         console.error("Error fetching exclusive leads:", error);
         res.status(500).json({ message: 'Server error occurred while fetching exclusive leads', error: error.toString() });
@@ -83,7 +95,8 @@ const updateLead = async (req, res) => {
         const { leadId } = req.params;
         const {
             timestamp, label, firstname, email, phone1, ozip, dzip, dcity, dstate, movesize, 
-            movedte, conversion, validation, notes, sent_to_gronat, sent_to_sheets, moverref, ocity, ostate
+            movedte, conversion, validation, notes, sent_to_gronat, sent_to_sheets, moverref, ocity, ostate,
+            isBooked // Include isBooked here
         } = req.body;
 
         const updateQuery = `
@@ -100,6 +113,18 @@ const updateLead = async (req, res) => {
             movedte, conversion, validation, notes, sent_to_gronat, sent_to_sheets, moverref, ocity, ostate, leadId
         ]);
 
+        // Log the received isBooked value for debugging
+        console.log(`Updating leadId: ${leadId}, isBooked: ${isBooked}`);
+
+        // Update MongoDB booked status if isBooked is provided
+        if (typeof isBooked !== 'undefined') {
+            await LeadStatus.findOneAndUpdate(
+                { leadId: leadId },
+                { booked: isBooked },
+                { new: true, upsert: true }
+            );
+        }
+
         res.json({ message: 'Lead updated successfully' });
     } catch (error) {
         console.error("Error updating lead:", error);
@@ -107,6 +132,53 @@ const updateLead = async (req, res) => {
     }
 };
 
+
+const updateBookedStatus = async (req, res) => {
+    try {
+        // Read data from Google Sheet starting at A2
+        const sheetData = await readFromGoogleSheet();
+
+        // Iterate over each row from the sheet
+        for (const [note] of sheetData) {
+            // Find matching lead in PostgreSQL
+            const { rows } = await mainPool.query('SELECT * FROM lead WHERE notes = $1', [note]);
+
+            // If a matching lead is found
+            if (rows.length > 0) {
+                const leadId = rows[0].id; // Assuming 'id' is the identifier for leads
+
+                // Update the booked status in MongoDB
+                await LeadStatus.findOneAndUpdate(
+                    { leadId: leadId },
+                    { booked: true },
+                    { new: true, upsert: true }
+                );
+            }
+        }
+
+        res.json({ message: 'Booked statuses updated from Google Sheet' });
+    } catch (error) {
+        console.error('Error updating booked statuses:', error);
+        res.status(500).json({ message: 'Error updating booked statuses', error: error.toString() });
+    }
+};
+
+const getBookedLeads = async (req, res) => {
+    try {
+        console.log('LeadStatus model:', LeadStatus); // Log the LeadStatus model
+        console.log('LeadStatus.find:', LeadStatus.find); // Log the find method of the model
+
+        const bookedLeads = await LeadStatus.find({ booked: true });
+        console.log('Booked Leads:', bookedLeads); // Log the result of the find method
+        res.json(bookedLeads);
+    } catch (error) {
+        console.error('Error fetching booked leads:', error);
+        res.status(500).json({ message: 'Error fetching booked leads', error: error.toString() });
+    }
+};
+
+router.get('/booked-leads', protect, getBookedLeads);
+router.put('/update-lead-booked-status/:leadId', protect, updateBookedStatus);
 router.get('/vendors', protect, getVendors);
 router.get('/exclusive-leads', protect, getExclusiveLeads);
 router.get('/shared-leads', protect, getSharedLeads);
