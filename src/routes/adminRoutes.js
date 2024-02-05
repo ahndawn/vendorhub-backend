@@ -90,6 +90,7 @@ const getVendors = async (req, res) => {
     }
 };
 
+
 const updateLead = async (req, res) => {
     try {
         const { leadId } = req.params;
@@ -177,6 +178,17 @@ const getBookedLeads = async (req, res) => {
     }
 };
 
+const vendorBookedLeads = async (req, res) => {
+    const vendor = req.params.vendor;
+    const bookedLeads = await LeadStatus.find({ booked: true });
+    const bookedLeadIds = bookedLeads.map(lead => lead.leadId);
+
+    // Assuming leads are stored in mainPool with a 'label' column for vendor
+    const { rows } = await mainPool.query('SELECT * FROM lead WHERE id = ANY($1::int[]) AND label = $2', [bookedLeadIds, vendor]);
+    res.json(rows);
+};
+
+router.get ('/booked-leads/:vendor', protect, vendorBookedLeads)
 router.get('/booked-leads', protect, getBookedLeads);
 router.put('/update-lead-booked-status/:leadId', protect, updateBookedStatus);
 router.get('/vendors', protect, getVendors);

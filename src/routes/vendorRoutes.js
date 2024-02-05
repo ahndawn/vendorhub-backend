@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { mainPool } = require('../services/db');
-const { protect } = require('../middleware/authMiddleware'); // Import the middleware
+const { protect } = require('../middleware/authMiddleware');
+const LeadStatus = require('../models/LeadStatus');
 
 const getVendorLeads = async (req, res) => {
     try {
@@ -76,7 +77,18 @@ const updateVendorLead = async (req, res) => {
     }
 };
 
-// Apply the authMiddleware to the routes
+// Fetch booked leads for a specific vendor
+const getBookedVendorLeads = async (req, res) => {
+    const vendor = req.params.vendor;
+    const bookedLeads = await LeadStatus.find({ booked: true });
+    const bookedLeadIds = bookedLeads.map(lead => lead.leadId);
+
+    // Assuming leads are stored in mainPool with a 'label' column for vendor
+    const { rows } = await mainPool.query('SELECT * FROM lead WHERE id = ANY($1::int[]) AND label = $2', [bookedLeadIds, vendor]);
+    res.json(rows);
+};
+
+router.get('/booked-leads/:vendor', protect, getBookedVendorLeads);
 router.get('/leads', protect, getVendorLeads);
 router.put('/update-lead/:leadId', protect, updateVendorLead);
 
