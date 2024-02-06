@@ -85,7 +85,11 @@ const getBookedVendorLeads = async (req, res) => {
 
     // Assuming leads are stored in mainPool with a 'label' column for vendor
     const { rows } = await mainPool.query('SELECT * FROM lead WHERE id = ANY($1::int[]) AND label = $2', [bookedLeadIds, vendor]);
-    res.json(rows);
+    
+    // Add isBooked property to each lead
+    const leadsWithBookedStatus = rows.map(row => ({ ...row, isBooked: bookedLeadIds.includes(row.id) }));
+
+    res.json(leadsWithBookedStatus);
 };
 
 router.get('/booked-leads/:vendor', protect, getBookedVendorLeads);
