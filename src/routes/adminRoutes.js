@@ -166,12 +166,17 @@ const updateBookedStatus = async (req, res) => {
 
 const getBookedLeads = async (req, res) => {
     try {
-        console.log('LeadStatus model:', LeadStatus); // Log the LeadStatus model
-        console.log('LeadStatus.find:', LeadStatus.find); // Log the find method of the model
-
+        // Fetch all leads marked as booked
         const bookedLeads = await LeadStatus.find({ booked: true });
-        console.log('Booked Leads:', bookedLeads); // Log the result of the find method
-        res.json(bookedLeads);
+        const bookedLeadIds = bookedLeads.map(lead => lead.leadId);
+
+        // Fetch all leads that are booked, regardless of the vendor
+        const { rows } = await mainPool.query('SELECT * FROM lead WHERE id = ANY($1::int[])', [bookedLeadIds]);
+        
+        // Add isBooked property to each lead
+        const leadsWithBookedStatus = rows.map(row => ({ ...row, isBooked: bookedLeadIds.includes(row.id) }));
+
+        res.json(leadsWithBookedStatus);
     } catch (error) {
         console.error('Error fetching booked leads:', error);
         res.status(500).json({ message: 'Error fetching booked leads', error: error.toString() });
