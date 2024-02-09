@@ -7,9 +7,6 @@ dist/
 *.log
 npm-debug.log*
 
-# Environment variables
-.env
-
 # IDE files
 .vscode/
 .idea/

@@ -1,0 +1,9 @@
+Deploying the application using Docker
+1: install docker the easiest way to do it https://docs.docker.com/desktop/install/mac-install/
+2: run " sudo docker build -t vendor-hub-backend .  "
+3: then run  " sudo docker run -it  vendor-hub-backend ""
+4: OptOptionally = can just run this single command " sudo docker build -t vendor-hub-backend .   &&   sudo docker run -it  vendor-hub-backend "
+Running the commands above will build and launch the app on a port if for some reason changes made are not updated you can run the above commands by using the flag " sudo docker build -t vendor-hub-backend . --no-cache
+
+ "
+ To run a specific port you can run sudo docker run -it -p 4000:4000 vendor-hub-backend
