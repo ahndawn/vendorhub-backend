@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const userRoutes = require('./src/routes/userRoutes');
 const vendorRoutes = require('./src/routes/vendorRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const cors = require('cors');
 
 dotenv.config();
 const app = express();
@@ -13,6 +14,8 @@ mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
+
+app.use(cors()); // Allow CORS from anywhere
 
 app.use('/api/users', userRoutes);
 app.use('/api/vendors', vendorRoutes);
