@@ -16,3 +16,6 @@ npm-debug.log*
 
 # macOS system files
 .DS_Store
+
+node_modules
+.env
