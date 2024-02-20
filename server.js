@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const userRoutes = require('./src/routes/userRoutes');
 const vendorRoutes = require('./src/routes/vendorRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const leadUpdates = require('./src/routes/leadUpdates');
 const cors = require('cors');
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(cors()); // Allow CORS from anywhere
 app.use('/api/users', userRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/update', leadUpdates);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, console.log(`Server running on port ${PORT}`));
