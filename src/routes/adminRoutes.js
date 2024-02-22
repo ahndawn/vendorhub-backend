@@ -16,17 +16,18 @@ const getExclusiveLeads = async (req, res) => {
         const query = 'SELECT * FROM lead WHERE timestamp = $1';
         const { rows } = await mainPool.query(query, [todaysDate]);
 
-        // Fetch booked lead IDs from MongoDB
-        const bookedLeads = await LeadStatus.find({ booked: true });
-        const bookedLeadIds = new Set(bookedLeads.map(lead => lead.leadId));
+        // Fetch lead statuses from MongoDB
+        const leadStatuses = await LeadStatus.find({});
+        const leadStatusMap = new Map(leadStatuses.map(status => [status.leadId, { isBooked: status.booked, isDuplicate: status.duplicate }]));
 
-        // Add isBooked status to each lead
-        const leadsWithBookedStatus = rows.map(lead => ({
+        // Add isBooked and isDuplicate status to each lead
+        const leadsWithStatus = rows.map(lead => ({
             ...lead,
-            isBooked: bookedLeadIds.has(lead.id)
+            isBooked: leadStatusMap.has(lead.id) ? leadStatusMap.get(lead.id).isBooked : false,
+            isDuplicate: leadStatusMap.has(lead.id) ? leadStatusMap.get(lead.id).isDuplicate : false
         }));
 
-        res.json(leadsWithBookedStatus);
+        res.json(leadsWithStatus);
     } catch (error) {
         console.error("Error fetching exclusive leads:", error);
         res.status(500).json({ message: 'Server error occurred while fetching exclusive leads', error: error.toString() });

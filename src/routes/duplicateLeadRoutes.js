@@ -1,67 +1,82 @@
 const express = require('express');
+const schedule = require('node-schedule');
 const router = express.Router();
 const { mainPool, sharedPool } = require('../services/db');
 const { protect } = require('../middleware/authMiddleware');
 const LeadStatus = require('../models/LeadStatus');
 
-const getAllDuplicateLeads = async (req, res) => {
-    // Query to find duplicates based on your criteria, e.g., same email or phone
-    const duplicateQuery = `
-        SELECT id, label, firstname, email, phone, COUNT(*)
-        FROM lead
-        GROUP BY id, label, firstname, email, phone
-        HAVING COUNT(*) > 1
-    `;
+const identifyAndMarkDuplicates = async () => {
+  const duplicateQuery = `
+      SELECT phone1, ARRAY_AGG(id) AS ids
+      FROM lead
+      GROUP BY phone1
+      HAVING COUNT(*) > 1
+  `;
 
-    try {
-        // Step 1: Identify duplicates
-        const { rows: duplicateRows } = await mainPool.query(duplicateQuery);
-        const duplicateLeadIds = duplicateRows.map(row => row.id);
+  try {
+      const { rows: duplicateRows } = await mainPool.query(duplicateQuery);
 
-        // Step 2: Fetch complete lead details for duplicates
-        const leadsDetailsQuery = 'SELECT * FROM lead WHERE id = ANY($1::int[])';
-        const { rows: leadsDetails } = await mainPool.query(leadsDetailsQuery, [duplicateLeadIds]);
-
-        // Step 3: Mark identified duplicates in LeadStatus, considering user actions
-        await Promise.all(leadsDetails.map(async (lead) => {
-            const existingStatus = await LeadStatus.findOne({ leadId: lead.id });
-            if (!existingStatus || existingStatus.userMarkedDuplicate !== false) {
-                // Mark as duplicate if not already marked by user as non-duplicate
-                await LeadStatus.updateOne(
-                    { leadId: lead.id },
-                    { $set: { duplicate: true } },
-                    { upsert: true }
-                );
-            }
-        }));
-
-        // Optionally, return the detailed leads marked as duplicates
-        res.json({ duplicates: leadsDetails });
-    } catch (error) {
-        console.error('Error fetching and marking duplicate leads:', error);
-        res.status(500).json({ message: 'Error fetching and marking duplicate leads', error: error.toString() });
-    }
+      for (const row of duplicateRows) {
+          for (const id of row.ids) {
+              const existingStatus = await LeadStatus.findOne({ leadId: id });
+              if (!existingStatus || existingStatus.userMarkedDuplicate !== true) {
+                  await LeadStatus.updateOne(
+                      { leadId: id },
+                      { $set: { duplicate: true } },
+                      { upsert: true }
+                  );
+              }
+          }
+      }
+  } catch (error) {
+      console.error('Error identifying and marking duplicates:', error);
+  }
 };
 
-// Route to mark a lead as duplicate/non-duplicate
-const markLeadDuplicate = async (req, res) => {
-    const { leadId } = req.params;
-    const { isDuplicate } = req.body; // Boolean indicating whether the lead is marked as duplicate or not
-  
-    try {
-      const lead = await LeadStatus.findByIdAndUpdate(leadId, {
-        $set: {
-          userMarkedDuplicate: isDuplicate,
-          duplicate: isDuplicate // Optionally synchronize the duplicate field based on user action
-        }
-      }, { new: true });
-  
-      res.json(lead);
-    } catch (error) {
-      console.error('Error updating lead duplicate status:', error);
-      res.status(500).json({ message: 'Error updating lead duplicate status', error: error.toString() });
-    }
-  };
+// Schedule the function to run every hour
+schedule.scheduleJob('0 * * * *', identifyAndMarkDuplicates);
 
-  router.put('/leads/:leadId/mark-duplicate', protect, markLeadDuplicate)
-  router.put('/leads/get-duplicates', protect, getAllDuplicateLeads)
+// Mark duplicates manually
+const markDuplicates =  async (req, res) => {
+  try {
+    await identifyAndMarkDuplicates();
+    res.status(200).json({ message: 'Duplicate marking process initiated successfully.' });
+  } catch (error) {
+    console.error('Error manually marking duplicates:', error);
+    res.status(500).json({ message: 'Error initiating duplicate marking process', error: error.toString() });
+  }
+};
+
+const getAllDuplicates = async (req, res) => {
+  try {
+      // Adjusted to exclude leads with lead.phone1 null or ''
+      const duplicates = await LeadStatus.find({ duplicate: true }).lean();
+      const duplicateIds = duplicates.map(dup => dup.leadId);
+
+      // Include a condition in your SQL query to exclude leads with phone1 being null or an empty string
+      const leadsQuery = `
+        SELECT * FROM lead 
+        WHERE id = ANY($1::int[]) 
+        AND phone1 IS NOT NULL 
+        AND phone1 <> '' 
+        ORDER BY phone1, id
+      `;
+      const { rows: leadsDetails } = await mainPool.query(leadsQuery, [duplicateIds]);
+
+      // Add isDuplicate status to each lead
+      const leadsWithDuplicateStatus = leadsDetails.map(lead => ({
+          ...lead,
+          isDuplicate: duplicateIds.includes(lead.id)
+      }));
+
+      res.json({ leads: leadsWithDuplicateStatus });
+  } catch (error) {
+      console.error('Error fetching duplicate leads:', error);
+      res.status(500).json({ message: 'Error fetching duplicate leads', error: error.toString() });
+  }
+};
+
+  router.get('/get-duplicates', protect, getAllDuplicates)
+  router.post('/manually-mark-duplicates', protect, markDuplicates)
+
+  module.exports = router

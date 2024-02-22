@@ -5,6 +5,7 @@ const userRoutes = require('./src/routes/userRoutes');
 const vendorRoutes = require('./src/routes/vendorRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
 const leadUpdates = require('./src/routes/leadUpdates');
+const duplicateLeadRoutes = require('./src/routes/duplicateLeadRoutes')
 const cors = require('cors');
 
 dotenv.config();
@@ -18,6 +19,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 app.use(cors()); // Allow CORS from anywhere
 
+app.use('/api/leads', duplicateLeadRoutes)
 app.use('/api/users', userRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/admin', adminRoutes);

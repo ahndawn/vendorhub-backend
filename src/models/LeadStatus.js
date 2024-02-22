@@ -9,6 +9,14 @@ const leadStatusSchema = new mongoose.Schema({
   booked: {
     type: Boolean,
     default: false
+  },
+  duplicate: {
+    type: Boolean,
+    default: false
+  },
+  userMarkedDuplicate: {
+    type: Boolean,
+    default: false
   }
   // add more attributes here 
 });
