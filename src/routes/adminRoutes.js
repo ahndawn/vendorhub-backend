@@ -13,19 +13,40 @@ const getTodaysDate = () => {
 const getExclusiveLeads = async (req, res) => {
     try {
         const todaysDate = getTodaysDate();
-        const query = 'SELECT * FROM lead WHERE timestamp = $1';
-        const { rows } = await mainPool.query(query, [todaysDate]);
+        // Fetch today's leads, excluding those with empty or null phone1
+        const query = `
+            SELECT * FROM lead 
+            WHERE timestamp = $1 
+            AND phone1 IS NOT NULL 
+            AND phone1 <> ''
+            ORDER BY timestamp DESC
+        `;
+        const { rows: todayLeads } = await mainPool.query(query, [todaysDate]);
 
-        // Fetch lead statuses from MongoDB
-        const leadStatuses = await LeadStatus.find({});
-        const leadStatusMap = new Map(leadStatuses.map(status => [status.leadId, { isBooked: status.booked, isDuplicate: status.duplicate }]));
+        // Fetch invalid leads based on validation == '0' directly from SQL
+        const invalidLeadsQuery = `
+            SELECT id FROM lead 
+            WHERE validation = '0' 
+            AND phone1 IS NOT NULL 
+            AND phone1 <> ''
+        `;
+        const { rows: invalidLeadsRows } = await mainPool.query(invalidLeadsQuery);
+        const invalidLeadIds = invalidLeadsRows.map(row => row.id);
 
-        // Add isBooked and isDuplicate status to each lead
-        const leadsWithStatus = rows.map(lead => ({
-            ...lead,
-            isBooked: leadStatusMap.has(lead.id) ? leadStatusMap.get(lead.id).isBooked : false,
-            isDuplicate: leadStatusMap.has(lead.id) ? leadStatusMap.get(lead.id).isDuplicate : false
-        }));
+        // Fetch all relevant lead statuses from MongoDB
+        const leadStatuses = await LeadStatus.find({}).lean();
+        const leadStatusMap = new Map(leadStatuses.map(status => [status.leadId, status]));
+
+        // Enhance today's leads with isDuplicate, isBooked, and invalid status
+        const leadsWithStatus = todayLeads.map(lead => {
+            const status = leadStatusMap.get(lead.id) || {};
+            return {
+                ...lead,
+                isDuplicate: !!status.duplicate,
+                isBooked: !!status.booked,
+                invalid: invalidLeadIds.includes(lead.id) || !!status.invalid // Mark as invalid if found in invalidLeadIds or marked in MongoDB
+            };
+        });
 
         res.json(leadsWithStatus);
     } catch (error) {
